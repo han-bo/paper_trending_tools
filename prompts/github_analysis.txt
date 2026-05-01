@@ -1,0 +1,18 @@
+请分析这个 GitHub 项目：
+
+项目名称：{repo_name}
+项目描述：{description}
+README：{readme}
+Stars：{stars}
+Contributors：{contributors}
+最近活跃情况：{recent_activity}
+
+请输出：
+
+1. 是否值得持续关注
+2. 技术壁垒在哪里
+3. 是否只是套壳项目
+4. 商业化可能性如何
+5. 是否值得自己投入研究
+6. 与现有项目相比差异在哪
+7. 最终给出 1~10 分评分
