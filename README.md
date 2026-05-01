@@ -65,15 +65,27 @@ python -m app.main
 
 ## Git 远程（本仓库）
 
-本地仓库可推送至单独远程（SSH）：
+已配置的默认远程 `origin`（SSH）为：
 
 ```text
 ssh://root@static.alex-tech.org:22/~/git/blog.git
 ```
 
-首次推送示例（需本机已配置对该主机的 SSH 访问，且远端已创建空仓库）：
+首次在本机关联远程（若尚未添加）：
 
 ```bash
 git remote add origin ssh://root@static.alex-tech.org:22/~/git/blog.git
 git push -u origin main
 ```
+
+### 若 `git push` 被拒绝
+
+说明远端 `main` 上**已有其他提交**（例如现有博客仓库历史）。当前本仓库与远端**无共同祖先**时，Git 会拒绝非快进推送。
+
+请任选其一（务必先确认不会误删远端需要保留的内容）：
+
+1. **专用裸库（推荐）**：在服务器上新建空裸库（例如 `~/git/paper_trending_tools.git`），将 `origin` 改为新地址再 `git push -u origin main`。
+2. **确认覆盖该远程地址**：仅当你确定要用本项目**完全替换**远端 `blog.git` 当前内容时，再执行  
+   `git push --force-with-lease origin main`（会改写远端 `main` 历史）。
+
+推送前需本机已能 `ssh` 登录 `root@static.alex-tech.org`，且远端路径为可写的 Git 仓库。
