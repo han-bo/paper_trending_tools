@@ -68,13 +68,13 @@ python -m app.main
 已配置的默认远程 `origin`（SSH）为：
 
 ```text
-ssh://root@static.alex-tech.org:22/~/git/blog.git
+ssh://root@static.alex-tech.org:22/~/git/paper_trend.git
 ```
 
 首次在本机关联远程（若尚未添加）：
 
 ```bash
-git remote add origin ssh://root@static.alex-tech.org:22/~/git/blog.git
+git remote add origin ssh://root@static.alex-tech.org:22/~/git/paper_trend.git
 git push -u origin main
 ```
 
@@ -85,7 +85,7 @@ git push -u origin main
 请任选其一（务必先确认不会误删远端需要保留的内容）：
 
 1. **专用裸库（推荐）**：在服务器上新建空裸库（例如 `~/git/paper_trending_tools.git`），将 `origin` 改为新地址再 `git push -u origin main`。
-2. **确认覆盖该远程地址**：仅当你确定要用本项目**完全替换**远端 `blog.git` 当前内容时，再执行  
+2. **确认覆盖该远程地址**：仅当你确定要用本项目**完全替换**远端 `paper_trend.git` 当前内容时，再执行  
    `git push --force-with-lease origin main`（会改写远端 `main` 历史）。
 
 推送前需本机已能 `ssh` 登录 `root@static.alex-tech.org`，且远端路径为可写的 Git 仓库。
