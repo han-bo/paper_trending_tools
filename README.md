@@ -79,7 +79,7 @@ python -m app.main
 
 ### 搜索与「趋势」偏好
 
-默认 `GITHUB_SEARCH_QUERY` 偏「高星 + 近期有推送」，若你更关注**新库或某一类主题**，可在 `.env` 中调整 `GITHUB_SEARCH_QUERY`（例如收紧 `stars` 区间或增加关键词），并可配合 `GITHUB_PUSHED_DAYS`、`GITHUB_PER_PAGE` 控制范围与列表长度。
+默认 GitHub 抓取偏「趋势发现」：`GITHUB_SEARCH_QUERY`（例如 `stars:>50`）、`GITHUB_PUSHED_DAYS`（近期活跃）、`GITHUB_CREATED_DAYS`（仅看最近 N 天创建），并用 `GITHUB_MAX_STARS` 过滤超头部常年顶流（想包含爆款可把该值调大）。`GITHUB_PER_PAGE` 控制返回数量。
 
 ### 摘要与数据库
 
