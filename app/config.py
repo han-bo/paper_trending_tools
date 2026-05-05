@@ -69,6 +69,8 @@ class Settings(BaseModel):
 
     arxiv_rss_urls: str = Field(default="http://export.arxiv.org/rss/cs.AI")
     arxiv_max_entries: int = Field(default=30, ge=1, le=200)
+    # arXiv 要求可识别的 User-Agent，见 https://info.arxiv.org/help/api/user-manual.html
+    arxiv_http_user_agent: str = Field(default="paper_trending_tools/1.0 (+https://info.arxiv.org/help/api/user-manual.html)")
 
     database_url: str = Field(default="sqlite:///data/local.db")
 
@@ -114,6 +116,10 @@ class Settings(BaseModel):
             github_per_page=_env_int("GITHUB_PER_PAGE", 20),
             arxiv_rss_urls=_env_str("ARXIV_RSS_URLS", "http://export.arxiv.org/rss/cs.AI"),
             arxiv_max_entries=_env_int("ARXIV_MAX_ENTRIES", 30),
+            arxiv_http_user_agent=_env_str(
+                "ARXIV_HTTP_USER_AGENT",
+                "paper_trending_tools/1.0 (+https://info.arxiv.org/help/api/user-manual.html)",
+            ),
             database_url=_env_str("DATABASE_URL", "sqlite:///data/local.db"),
             volcengine_api_key=_env_str("VOLCENGINE_API_KEY", ""),
             volcengine_api_base=_env_str(
