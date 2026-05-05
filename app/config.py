@@ -79,6 +79,9 @@ class Settings(BaseModel):
     volcengine_read_timeout: float = Field(default=300.0, ge=30.0, le=900.0)
     llm_github_readme_max_chars: int = Field(default=6000, ge=2000, le=50000)
     llm_paper_abstract_max_chars: int = Field(default=8000, ge=1000, le=50000)
+    volcengine_429_max_attempts: int = Field(default=8, ge=2, le=20)
+    volcengine_429_base_wait_seconds: float = Field(default=2.0, ge=0.5, le=60.0)
+    volcengine_llm_interval_seconds: float = Field(default=1.5, ge=0.0, le=60.0)
 
     telegram_bot_token: str = Field(default="")
     telegram_chat_id: str = Field(default="")
@@ -122,6 +125,15 @@ class Settings(BaseModel):
             volcengine_read_timeout=_env_float("VOLCENGINE_READ_TIMEOUT", 300.0),
             llm_github_readme_max_chars=_env_int("LLM_GITHUB_README_MAX_CHARS", 6000),
             llm_paper_abstract_max_chars=_env_int("LLM_PAPER_ABSTRACT_MAX_CHARS", 8000),
+            volcengine_429_max_attempts=_env_int("VOLCENGINE_429_MAX_ATTEMPTS", 8),
+            volcengine_429_base_wait_seconds=_env_float(
+                "VOLCENGINE_429_BASE_WAIT_SECONDS",
+                2.0,
+            ),
+            volcengine_llm_interval_seconds=_env_float(
+                "VOLCENGINE_LLM_INTERVAL_SECONDS",
+                1.5,
+            ),
             telegram_bot_token=_env_str("TELEGRAM_BOT_TOKEN", ""),
             telegram_chat_id=_env_str("TELEGRAM_CHAT_ID", ""),
             smtp_host=_env_str("SMTP_HOST", ""),

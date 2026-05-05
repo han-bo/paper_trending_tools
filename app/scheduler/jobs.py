@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -41,6 +42,13 @@ def _today_tag() -> str:
 def _max_id(session, model) -> int:
     v = session.scalar(select(func.max(model.id)))
     return int(v or 0)
+
+
+def _sleep_between_llm_calls() -> None:
+    """降低连续请求触发方舟限频的概率；VOLCENGINE_LLM_INTERVAL_SECONDS=0 可关闭。"""
+    sec = settings.volcengine_llm_interval_seconds
+    if sec > 0:
+        time.sleep(sec)
 
 
 def run_daily_pipeline() -> None:
@@ -159,6 +167,7 @@ def run_daily_pipeline() -> None:
                 row.score = combine_github_scores(eng, rating)
                 row.worth_follow = gh_worth(rating)
                 session.add(row)
+                _sleep_between_llm_calls()
 
             logger.info("LLM 分析 arXiv Top {} …", settings.llm_analyze_arxiv_top)
             for row in new_arxiv[: settings.llm_analyze_arxiv_top]:
@@ -195,6 +204,7 @@ def run_daily_pipeline() -> None:
                 row.score = combine_arxiv_scores(eng, rating)
                 row.worth_follow = arxiv_worth(rating)
                 session.add(row)
+                _sleep_between_llm_calls()
             session.commit()
         else:
             logger.warning("跳过 LLM：未配置 VOLCENGINE_API_KEY / VOLCENGINE_MODEL")

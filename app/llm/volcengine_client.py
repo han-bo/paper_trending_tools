@@ -1,11 +1,26 @@
 from __future__ import annotations
 
+import random
+import time
 from typing import Any
 
 import httpx
 from loguru import logger
 
 from app.config import settings
+
+
+def _wait_after_429(response: httpx.Response, attempt_index: int) -> float:
+    """429 后等待秒数：优先 Retry-After，否则指数退避 + 少量抖动。"""
+    ra = response.headers.get("Retry-After")
+    if ra:
+        try:
+            return min(float(ra), 120.0)
+        except ValueError:
+            pass
+    base = settings.volcengine_429_base_wait_seconds
+    raw = base * (2**attempt_index) + random.uniform(0.0, 0.75)
+    return min(raw, 90.0)
 
 
 def chat_completions(
@@ -31,8 +46,25 @@ def chat_completions(
         write=60.0,
         pool=30.0,
     )
+    max_attempts = settings.volcengine_429_max_attempts
     with httpx.Client(timeout=timeout) as client:
-        r = client.post(url, json=payload, headers=headers)
+        r: httpx.Response | None = None
+        for attempt in range(max_attempts):
+            r = client.post(url, json=payload, headers=headers)
+            if r.status_code == 429:
+                if attempt >= max_attempts - 1:
+                    break
+                w = _wait_after_429(r, attempt)
+                logger.warning(
+                    "方舟 API 429，{:.1f}s 后重试（第 {}/{} 次请求）",
+                    w,
+                    attempt + 2,
+                    max_attempts,
+                )
+                time.sleep(w)
+                continue
+            break
+        assert r is not None
         if r.status_code >= 400:
             logger.error("火山引擎 API 错误 {}: {}", r.status_code, r.text[:500])
         r.raise_for_status()
