@@ -226,13 +226,45 @@ def run_daily_pipeline() -> None:
         if not ax_df.empty:
             ax_df = ax_df.sort_values("score", ascending=False)
 
+        def _snip_reason(ai_summary: object, *, max_chars: int = 260) -> str:
+            if not isinstance(ai_summary, str) or not ai_summary.strip():
+                return ""
+            raw_lines = [ln.rstrip() for ln in ai_summary.strip().splitlines()]
+            # 常见 LLM 输出会先给 Markdown 标题（例如 "### 1. 是否值得持续关注"），
+            # digest 更关心后面的解释正文：跳过开头标题与紧随的空行，取“第一段”（到空行为止）。
+            i = 0
+            while i < len(raw_lines) and not raw_lines[i].strip():
+                i += 1
+            while i < len(raw_lines) and raw_lines[i].lstrip().startswith("#"):
+                i += 1
+                while i < len(raw_lines) and not raw_lines[i].strip():
+                    i += 1
+
+            para: list[str] = []
+            while i < len(raw_lines):
+                ln = raw_lines[i].strip()
+                if not ln:
+                    break
+                para.append(ln)
+                i += 1
+
+            if not para:
+                # 只有标题或格式异常时，退回用第一条非空行
+                for ln in raw_lines:
+                    if ln.strip():
+                        para = [ln.strip()]
+                        break
+
+            text = " ".join(para).strip()
+            if len(text) > max_chars:
+                text = text[:max_chars].rstrip() + "…"
+            return text
+
         digest_lines: list[str] = ["【今日值得关注】", "", "GitHub Top {}".format(settings.digest_github_top_n), ""]
         top_gh = gh_df.head(settings.digest_github_top_n) if not gh_df.empty else gh_df
         idx = 1
         for _, r in top_gh.iterrows():
-            reason = ""
-            if isinstance(r.get("ai_summary"), str) and r["ai_summary"]:
-                reason = (r["ai_summary"].splitlines()[0][:200] + "…") if len(r["ai_summary"]) > 200 else r["ai_summary"]
+            reason = _snip_reason(r.get("ai_summary"))
             digest_lines.append(f"{idx}. {r['repo_name']}")
             digest_lines.append(f"原因：{reason or '（规则层排序，尚未生成摘要）'}")
             digest_lines.append(f"评分：{float(r['score']):.1f}")
@@ -245,9 +277,7 @@ def run_daily_pipeline() -> None:
         top_ax = ax_df.head(settings.digest_arxiv_top_n) if not ax_df.empty else ax_df
         idx = 1
         for _, r in top_ax.iterrows():
-            reason = ""
-            if isinstance(r.get("ai_summary"), str) and r["ai_summary"]:
-                reason = (r["ai_summary"].splitlines()[0][:200] + "…") if len(r["ai_summary"]) > 200 else r["ai_summary"]
+            reason = _snip_reason(r.get("ai_summary"))
             digest_lines.append(f"{idx}. {r['title']}")
             digest_lines.append(f"原因：{reason or '（规则层排序，尚未生成摘要）'}")
             digest_lines.append(f"评分：{float(r['score']):.1f}")
