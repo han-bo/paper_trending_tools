@@ -18,6 +18,7 @@ from app.llm.prompt_builder import (
     parse_final_score_1_to_10,
 )
 from app.llm.volcengine_client import chat_completions
+from app.notifier.email_notify import email_notify_configured, send_digest_email
 from app.notifier.telegram_bot import send_digest
 from app.ranking.arxiv_score import (
     combine_arxiv_scores,
@@ -236,16 +237,32 @@ def run_daily_pipeline() -> None:
         digest_lines.append(f"今天最值得深入研究的是：{pick}")
 
         content = "\n".join(digest_lines).strip()
-        sent_status = "skipped"
+        status_parts: list[str] = []
+
         if settings.telegram_bot_token and settings.telegram_chat_id:
             try:
                 send_digest(content)
-                sent_status = "sent"
+                status_parts.append("telegram:sent")
             except Exception as e:
                 logger.exception("Telegram 推送失败: {}", e)
-                sent_status = f"error:{e}"
+                status_parts.append(f"telegram:error:{e}")
         else:
             logger.warning("跳过 Telegram：未配置 TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID")
+
+        if email_notify_configured():
+            try:
+                send_digest_email(content)
+                status_parts.append("email:sent")
+            except Exception as e:
+                logger.exception("邮件发送失败: {}", e)
+                status_parts.append(f"email:error:{e}")
+        else:
+            logger.warning("跳过邮件：未配置 SMTP_HOST / SMTP_FROM / DIGEST_EMAIL_TO")
+
+        if not status_parts:
+            sent_status = "skipped"
+        else:
+            sent_status = ";".join(status_parts)
 
         session.add(
             DailyDigest(

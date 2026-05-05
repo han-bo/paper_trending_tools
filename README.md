@@ -1,6 +1,6 @@
 # GitHub + arXiv Intelligence Agent（个人版 MVP）
 
-个人研究情报系统：自动抓取 GitHub 与 arXiv，规则层排序，可选火山引擎 LLM 深度分析，并通过 Telegram 推送每日摘要。
+个人研究情报系统：自动抓取 GitHub 与 arXiv，规则层排序，可选火山引擎 LLM 深度分析；每日摘要可通过 **Telegram** 和/或 **邮件**（标准库 `smtplib`，无额外依赖）推送。
 
 ## 环境
 
@@ -21,7 +21,8 @@ cp .env.example .env
 
 - `GITHUB_TOKEN`：GitHub PAT，提高 REST API 限额并访问私有数据以外的高级能力（**强烈建议配置**）。
 - `VOLCENGINE_API_KEY` / `VOLCENGINE_MODEL`：火山方舟 OpenAI 兼容接口的 API Key 与接入点 ID（`ep-...`）。未配置时将只做规则层评分。
-- `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID`：BotFather 创建的 Bot 与目标会话 ID。未配置时仍会写入 `daily_digest` 表，但不推送。
+- `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID`：BotFather 创建的 Bot 与目标会话 ID。未配置则跳过 Telegram。
+- **邮件**：配置 `SMTP_HOST`、`SMTP_FROM`、`DIGEST_EMAIL_TO`（多个收件人用英文逗号分隔）后即会发送与 Telegram 相同正文的纯文本邮件。常用项：`SMTP_PORT`（默认 `587`）、`SMTP_USER` / `SMTP_PASSWORD`、`SMTP_STARTTLS`（默认 `true`）。若使用 **465 + SSL**，设 `SMTP_PORT=465`、`SMTP_USE_SSL=true`、`SMTP_STARTTLS=false`。可选 `DIGEST_EMAIL_SUBJECT` 自定义主题。
 
 ## 运行
 
@@ -45,10 +46,10 @@ python -m app.main
 
 **请务必在 `.env` 中配置有效的 `GITHUB_TOKEN`**，以保证每日流程稳定可用。
 
-### LLM 与 Telegram 可选
+### LLM 与推送渠道（Telegram / 邮件）可选
 
 - 未配置 `VOLCENGINE_API_KEY` / `VOLCENGINE_MODEL` 时，会**跳过 LLM**，仅使用规则层评分；数据库仍会写入本轮抓取记录。
-- 未配置 `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` 时，会**跳过 Telegram 推送**，仍会生成摘要正文并写入 `daily_digest` 表（`sent_status` 一般为 `skipped`）。
+- **Telegram** 与 **邮件**可同时开启，也可只开其一。若两者均未配置，仍会生成摘要并写入 `daily_digest` 表，此时 `sent_status` 为 `skipped`；否则 `sent_status` 会记录各渠道结果（例如 `email:sent`、`telegram:sent` 或 `email:error:…`）。
 
 ### 搜索与「趋势」偏好
 
