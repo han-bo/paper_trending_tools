@@ -9,6 +9,9 @@ from loguru import logger
 
 from app.config import settings
 
+# GitHub 对超大仓库拒绝列出 contributors；规则层评分中贡献者项按「≥80 即满分」饱和，占位用 100。
+_CONTRIBUTORS_TOO_LARGE_PLACEHOLDER = 100
+
 
 def _headers() -> dict[str, str]:
     h = {
@@ -23,7 +26,12 @@ def _headers() -> dict[str, str]:
 def _get_json(url: str, params: dict | None = None) -> Any:
     r = requests.get(url, headers=_headers(), params=params or {}, timeout=60)
     if r.status_code == 403:
-        logger.warning("GitHub API 403: {}", r.text[:240])
+        snippet = (r.text or "")[:280]
+        # 超大仓库 contributors：官方明确不支持，非限流/鉴权问题，避免刷 WARNING
+        if "/contributors" in url and "too large" in snippet.lower():
+            logger.debug("GitHub contributors 403（列表过大）: {}", url)
+        else:
+            logger.warning("GitHub API 403: {}", snippet)
     r.raise_for_status()
     return r.json()
 
@@ -38,7 +46,19 @@ def _count_contributors(owner: str, repo: str) -> int:
         try:
             batch = _get_json(url, params={"per_page": per_page, "page": page})
         except requests.HTTPError as e:
-            if e.response is not None and e.response.status_code in (403, 422):
+            resp = e.response
+            if resp is not None and resp.status_code == 403:
+                try:
+                    msg = (resp.json() or {}).get("message", "") or ""
+                except Exception:
+                    msg = ""
+                if "too large" in msg.lower():
+                    logger.info(
+                        "贡献者列表过大，GitHub 不提供计数，评分按大量贡献者占位: {}",
+                        f"{owner}/{repo}",
+                    )
+                    return _CONTRIBUTORS_TOO_LARGE_PLACEHOLDER
+            if resp is not None and resp.status_code in (403, 422):
                 logger.warning("contributors 接口不可用 {}: {}", f"{owner}/{repo}", e)
                 return total
             logger.warning("contributors HTTP 错误 {}: {}", f"{owner}/{repo}", e)
