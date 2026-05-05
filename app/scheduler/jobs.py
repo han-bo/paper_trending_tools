@@ -284,7 +284,10 @@ def run_daily_pipeline() -> None:
                 logger.exception("邮件发送失败: {}", e)
                 status_parts.append(f"email:error:{e}")
         else:
-            logger.warning("跳过邮件：未配置 SMTP_HOST / SMTP_FROM / DIGEST_EMAIL_TO")
+            logger.warning(
+                "跳过邮件：未配置完整的 Zoho Mail API（见 .env.example 中 ZOHO_*）"
+                "或未配置 DIGEST_EMAIL_TO"
+            )
 
         if not status_parts:
             sent_status = "skipped"

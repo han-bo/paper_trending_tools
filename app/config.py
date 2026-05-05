@@ -88,15 +88,16 @@ class Settings(BaseModel):
     telegram_bot_token: str = Field(default="")
     telegram_chat_id: str = Field(default="")
 
-    smtp_host: str = Field(default="")
-    smtp_port: int = Field(default=587, ge=1, le=65535)
-    smtp_user: str = Field(default="")
-    smtp_password: str = Field(default="")
-    smtp_from: str = Field(default="")
-    smtp_starttls: bool = Field(default=True)
-    smtp_use_ssl: bool = Field(default=False)
     digest_email_to: str = Field(default="")
     digest_email_subject: str = Field(default="【今日值得关注】研究摘要")
+
+    zoho_accounts_base: str = Field(default="")
+    zoho_mail_api_base: str = Field(default="")
+    zoho_oauth_client_id: str = Field(default="")
+    zoho_oauth_client_secret: str = Field(default="")
+    zoho_oauth_refresh_token: str = Field(default="")
+    zoho_mail_from: str = Field(default="")
+    zoho_mail_account_id: str = Field(default="")
 
     digest_github_top_n: int = Field(default=5, ge=1, le=20)
     digest_arxiv_top_n: int = Field(default=3, ge=1, le=20)
@@ -142,15 +143,15 @@ class Settings(BaseModel):
             ),
             telegram_bot_token=_env_str("TELEGRAM_BOT_TOKEN", ""),
             telegram_chat_id=_env_str("TELEGRAM_CHAT_ID", ""),
-            smtp_host=_env_str("SMTP_HOST", ""),
-            smtp_port=_env_int("SMTP_PORT", 587),
-            smtp_user=_env_str("SMTP_USER", ""),
-            smtp_password=_env_str("SMTP_PASSWORD", ""),
-            smtp_from=_env_str("SMTP_FROM", ""),
-            smtp_starttls=_env_bool("SMTP_STARTTLS", True),
-            smtp_use_ssl=_env_bool("SMTP_USE_SSL", False),
             digest_email_to=_env_str("DIGEST_EMAIL_TO", ""),
             digest_email_subject=_env_str("DIGEST_EMAIL_SUBJECT", "【今日值得关注】研究摘要"),
+            zoho_accounts_base=_env_str("ZOHO_ACCOUNTS_BASE", ""),
+            zoho_mail_api_base=_env_str("ZOHO_MAIL_API_BASE", ""),
+            zoho_oauth_client_id=_env_str("ZOHO_OAUTH_CLIENT_ID", ""),
+            zoho_oauth_client_secret=_env_str("ZOHO_OAUTH_CLIENT_SECRET", ""),
+            zoho_oauth_refresh_token=_env_str("ZOHO_OAUTH_REFRESH_TOKEN", ""),
+            zoho_mail_from=_env_str("ZOHO_MAIL_FROM", ""),
+            zoho_mail_account_id=_env_str("ZOHO_MAIL_ACCOUNT_ID", ""),
             digest_github_top_n=_env_int("DIGEST_GITHUB_TOP_N", 5),
             digest_arxiv_top_n=_env_int("DIGEST_ARXIV_TOP_N", 3),
             llm_analyze_github_top=_env_int("LLM_ANALYZE_GITHUB_TOP", 15),

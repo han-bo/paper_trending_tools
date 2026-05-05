@@ -1,6 +1,6 @@
 # GitHub + arXiv Intelligence Agent（个人版 MVP）
 
-个人研究情报系统：自动抓取 GitHub 与 arXiv，规则层排序，可选火山引擎 LLM 深度分析；每日摘要可通过 **Telegram** 和/或 **邮件**（标准库 `smtplib`，无额外依赖）推送。
+个人研究情报系统：自动抓取 GitHub 与 arXiv，规则层排序，可选火山引擎 LLM 深度分析；每日摘要可通过 **Telegram** 和/或 **邮件**（**Zoho Mail API**，HTTPS）推送。
 
 ## 环境
 
@@ -26,7 +26,7 @@ cp .env.example .env
 - `VOLCENGINE_LLM_INTERVAL_SECONDS`：每条 GitHub/arXiv 分析成功后的间隔（秒），减轻连发触发限频；设为 `0` 可关闭。
 - `LLM_GITHUB_README_MAX_CHARS` / `LLM_PAPER_ABSTRACT_MAX_CHARS`：送入模型的 README / 摘要最大字符数，默认缩短以降低延迟与超时。
 - `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID`：BotFather 创建的 Bot 与目标会话 ID。未配置则跳过 Telegram。
-- **邮件**：配置 `SMTP_HOST`、`SMTP_FROM`、`DIGEST_EMAIL_TO`（多个收件人用英文逗号分隔）后即会发送与 Telegram 相同正文的纯文本邮件。常用项：`SMTP_PORT`（默认 `587`）、`SMTP_USER` / `SMTP_PASSWORD`、`SMTP_STARTTLS`（默认 `true`）。若使用 **465 + SSL**，设 `SMTP_PORT=465`、`SMTP_USE_SSL=true`、`SMTP_STARTTLS=false`。可选 `DIGEST_EMAIL_SUBJECT` 自定义主题。
+- **邮件**：通过 **Zoho Mail API**（HTTPS）发信。配置 `DIGEST_EMAIL_TO`（多个收件人用英文逗号分隔）、`DIGEST_EMAIL_SUBJECT`，以及 `.env.example` 中全套 `ZOHO_*`（OAuth `CLIENT_ID` / `CLIENT_SECRET` / `REFRESH_TOKEN`，`ZOHO_ACCOUNTS_BASE`、`ZOHO_MAIL_API_BASE`、`ZOHO_MAIL_FROM`，可选 `ZOHO_MAIL_ACCOUNT_ID`）。`ZOHO_ACCOUNTS_*` 与 `ZOHO_MAIL_*` 域名须与账号数据中心一致（如国际 `.com`、欧洲 `.eu`）。
 
 ## 运行
 
@@ -40,6 +40,14 @@ python -m app.main --once
 
 ```bash
 python -m app.main --test-llm
+```
+
+只验证 Zoho Mail API 能否换票、发一封测试邮件（读 `.env` 中 `ZOHO_*`，收件人默认 `DIGEST_EMAIL_TO`）：
+
+```bash
+python zoho_mail_probe.py
+python zoho_mail_probe.py --dry-run
+python zoho_mail_probe.py --to you@example.com
 ```
 
 查看本地库里已抓取的 GitHub / arXiv / 每日摘要（**只读**，不跑任务；路径由 `DATABASE_URL` 决定）：
