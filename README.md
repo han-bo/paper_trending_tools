@@ -34,6 +34,12 @@ cp .env.example .env
 python -m app.main --once
 ```
 
+只验证火山方舟 LLM 是否通（不发 GitHub/arXiv 任务）：
+
+```bash
+python -m app.main --test-llm
+```
+
 按 `.env` 中的 Cron 配置常驻调度（默认每天 8:00，时区 `Asia/Shanghai`）：
 
 ```bash
