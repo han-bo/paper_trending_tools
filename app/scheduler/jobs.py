@@ -34,6 +34,102 @@ from app.ranking.github_score import (
 )
 
 
+def _compact_ai_reason(ai_summary: object, *, max_points: int = 3) -> str:
+    """把 LLM 长输出压缩成「结论 + 2~3 个要点」，避免 digest 只看到标题。"""
+    if not isinstance(ai_summary, str) or not ai_summary.strip():
+        return ""
+    lines = [ln.strip() for ln in ai_summary.splitlines() if ln.strip()]
+    if not lines:
+        return ""
+
+    picked: list[str] = []
+
+    # 1) 结论：优先找“是否值得持续关注/值得关注/不值得”
+    for ln in lines:
+        if "值得持续关注" in ln or ("值得" in ln and ("关注" in ln or "跟进" in ln)):
+            picked.append(ln.lstrip("#").strip())
+            break
+        if "不值得" in ln and ("关注" in ln or "跟进" in ln):
+            picked.append(ln.lstrip("#").strip())
+            break
+
+    # 2) 关键点：技术壁垒 / 套壳 / 商业化 / 差异
+    keywords = ("技术壁垒", "套壳", "商业", "落地", "差异", "护城河", "壁垒", "复用", "成本")
+    for ln in lines:
+        if ln.startswith("#"):
+            continue
+        if any(k in ln for k in keywords):
+            s = ln.strip("- ").strip()
+            if s and s not in picked:
+                picked.append(s)
+        if len(picked) >= max_points:
+            break
+
+    # 3) 如果仍不足，用第一段非标题补齐
+    if len(picked) < 2:
+        for ln in lines:
+            if ln.startswith("#"):
+                continue
+            s = ln.strip("- ").strip()
+            if s and s not in picked:
+                picked.append(s)
+            if len(picked) >= max_points:
+                break
+
+    picked = [p for p in picked if p]
+    if not picked:
+        return ""
+    if len(picked) == 1:
+        return picked[0][:260] + ("…" if len(picked[0]) > 260 else "")
+    # 用分号拼成 1 行
+    text = "；".join(picked[:max_points])
+    return text[:320] + ("…" if len(text) > 320 else "")
+
+
+def _suggest_pick(gh_df: pd.DataFrame, ax_df: pd.DataFrame) -> str:
+    """独立于综合分的“今日建议”：偏向新出现、可落地、能行动。"""
+    # GitHub：避免常年顶流，优先“近期增星明显 + 分高”的中等规模项目
+    if not gh_df.empty:
+        df = gh_df.copy()
+        for col in ("stars", "stars_growth", "score"):
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+        df["worth_follow"] = df.get("worth_follow", False).fillna(False)
+
+        cand = df[
+            (df["stars"] > 0)
+            & (df["stars"] < settings.github_max_stars)
+            & ((df["stars_growth"] >= 50) | (df["worth_follow"] == True))  # noqa: E712
+        ]
+        if not cand.empty:
+            cand = cand.sort_values(
+                ["worth_follow", "stars_growth", "score"],
+                ascending=[False, False, False],
+            )
+            return str(cand.iloc[0].get("repo_name") or "（暂无）")
+
+        # 退化：取排除顶流后的最高分
+        cand2 = df[df["stars"] < settings.github_max_stars]
+        if not cand2.empty:
+            cand2 = cand2.sort_values(["score"], ascending=[False])
+            return str(cand2.iloc[0].get("repo_name") or "（暂无）")
+
+        return str(df.iloc[0].get("repo_name") or "（暂无）")
+
+    # arXiv：优先带代码仓库，其次最高分
+    if not ax_df.empty:
+        df = ax_df.copy()
+        df["score"] = pd.to_numeric(df.get("score"), errors="coerce").fillna(0)
+        with_code = df[df.get("github_repo_url").fillna("").astype(str).str.len() > 0]
+        if not with_code.empty:
+            with_code = with_code.sort_values(["score"], ascending=[False])
+            return str(with_code.iloc[0].get("title") or "（暂无）")
+        df = df.sort_values(["score"], ascending=[False])
+        return str(df.iloc[0].get("title") or "（暂无）")
+
+    return "（暂无）"
+
+
 def _today_tag() -> str:
     tz = ZoneInfo(settings.scheduler_timezone)
     return datetime.now(tz=tz).date().isoformat()
@@ -122,21 +218,25 @@ def run_daily_pipeline() -> None:
 
         if llm_ready:
             logger.info("LLM 分析 GitHub Top {} …", settings.llm_analyze_github_top)
-            for row in new_github[: settings.llm_analyze_github_top]:
+            for gh_row in new_github[: settings.llm_analyze_github_top]:
                 desc_snip = ""
-                if row.raw_readme:
-                    desc_snip = row.raw_readme.strip().split("\n\n", 1)[0][:800]
+                if gh_row.raw_readme:
+                    desc_snip = gh_row.raw_readme.strip().split("\n\n", 1)[0][:800]
                 recent_activity = (
-                    f"Stars 增长：{row.stars_growth}；Issue：{row.issue_count}；Release：{row.release_count}"
+                    f"Stars 增长：{gh_row.stars_growth}；"
+                    f"Issue：{gh_row.issue_count}；"
+                    f"Release：{gh_row.release_count}"
                 )
-                if row.last_commit_at:
-                    recent_activity += f"；最近提交：{row.last_commit_at.date().isoformat()}"
+                if gh_row.last_commit_at:
+                    recent_activity += (
+                        f"；最近提交：{gh_row.last_commit_at.date().isoformat()}"
+                    )
                 prompt = build_github_prompt(
-                    repo_name=row.repo_name,
+                    repo_name=gh_row.repo_name,
                     description=desc_snip or "（无单独描述字段，详见 README）",
-                    readme=row.raw_readme or "",
-                    stars=row.stars,
-                    contributors=row.contributors,
+                    readme=gh_row.raw_readme or "",
+                    stars=gh_row.stars,
+                    contributors=gh_row.contributors,
                     recent_activity=recent_activity,
                 )
                 try:
@@ -145,38 +245,38 @@ def run_daily_pipeline() -> None:
                     logger.warning(
                         "GitHub LLM 超时（read {:.0f}s）{}: {}",
                         settings.volcengine_read_timeout,
-                        row.repo_name,
+                        gh_row.repo_name,
                         e,
                     )
                     continue
                 except Exception as e:
-                    logger.exception("GitHub LLM 失败 {}: {}", row.repo_name, e)
+                    logger.exception("GitHub LLM 失败 {}: {}", gh_row.repo_name, e)
                     continue
                 rating = parse_final_score_1_to_10(text)
                 eng = gh_engineering(
                     {
-                        "stars": row.stars,
-                        "stars_growth": row.stars_growth,
-                        "contributors": row.contributors,
-                        "release_count": row.release_count,
-                        "issue_count": row.issue_count,
-                        "last_commit_at": row.last_commit_at,
+                        "stars": gh_row.stars,
+                        "stars_growth": gh_row.stars_growth,
+                        "contributors": gh_row.contributors,
+                        "release_count": gh_row.release_count,
+                        "issue_count": gh_row.issue_count,
+                        "last_commit_at": gh_row.last_commit_at,
                     }
                 )
-                row.ai_summary = text
-                row.score = combine_github_scores(eng, rating)
-                row.worth_follow = gh_worth(rating)
-                session.add(row)
+                gh_row.ai_summary = text
+                gh_row.score = combine_github_scores(eng, rating)
+                gh_row.worth_follow = gh_worth(rating)
+                session.add(gh_row)
                 _sleep_between_llm_calls()
 
             logger.info("LLM 分析 arXiv Top {} …", settings.llm_analyze_arxiv_top)
-            for row in new_arxiv[: settings.llm_analyze_arxiv_top]:
+            for ax_row in new_arxiv[: settings.llm_analyze_arxiv_top]:
                 prompt = build_paper_prompt(
-                    title=row.title,
-                    abstract=row.abstract or "",
-                    authors=row.authors or "",
-                    category=row.category or "",
-                    github_repo=row.github_repo_url or "",
+                    title=ax_row.title,
+                    abstract=ax_row.abstract or "",
+                    authors=ax_row.authors or "",
+                    category=ax_row.category or "",
+                    github_repo=ax_row.github_repo_url or "",
                 )
                 try:
                     text = chat_completions([{"role": "user", "content": prompt}])
@@ -184,26 +284,26 @@ def run_daily_pipeline() -> None:
                     logger.warning(
                         "arXiv LLM 超时（read {:.0f}s）{}: {}",
                         settings.volcengine_read_timeout,
-                        row.title[:80],
+                        ax_row.title[:80],
                         e,
                     )
                     continue
                 except Exception as e:
-                    logger.exception("arXiv LLM 失败 {}: {}", row.title[:80], e)
+                    logger.exception("arXiv LLM 失败 {}: {}", ax_row.title[:80], e)
                     continue
                 rating = parse_final_score_1_to_10(text)
                 eng = arxiv_engineering(
                     {
-                        "abstract": row.abstract,
-                        "github_repo_url": row.github_repo_url,
-                        "category": row.category,
-                        "authors": row.authors,
+                        "abstract": ax_row.abstract,
+                        "github_repo_url": ax_row.github_repo_url,
+                        "category": ax_row.category,
+                        "authors": ax_row.authors,
                     }
                 )
-                row.ai_summary = text
-                row.score = combine_arxiv_scores(eng, rating)
-                row.worth_follow = arxiv_worth(rating)
-                session.add(row)
+                ax_row.ai_summary = text
+                ax_row.score = combine_arxiv_scores(eng, rating)
+                ax_row.worth_follow = arxiv_worth(rating)
+                session.add(ax_row)
                 _sleep_between_llm_calls()
             session.commit()
         else:
@@ -222,49 +322,15 @@ def run_daily_pipeline() -> None:
         gh_df = pd.DataFrame([_row_dict(g) for g in new_github])
         if not gh_df.empty:
             gh_df = gh_df.sort_values("score", ascending=False)
-        ax_df = pd.DataFrame([a.__dict__ for a in new_arxiv])
+        ax_df = pd.DataFrame([_row_dict(a) for a in new_arxiv])
         if not ax_df.empty:
             ax_df = ax_df.sort_values("score", ascending=False)
-
-        def _snip_reason(ai_summary: object, *, max_chars: int = 260) -> str:
-            if not isinstance(ai_summary, str) or not ai_summary.strip():
-                return ""
-            raw_lines = [ln.rstrip() for ln in ai_summary.strip().splitlines()]
-            # 常见 LLM 输出会先给 Markdown 标题（例如 "### 1. 是否值得持续关注"），
-            # digest 更关心后面的解释正文：跳过开头标题与紧随的空行，取“第一段”（到空行为止）。
-            i = 0
-            while i < len(raw_lines) and not raw_lines[i].strip():
-                i += 1
-            while i < len(raw_lines) and raw_lines[i].lstrip().startswith("#"):
-                i += 1
-                while i < len(raw_lines) and not raw_lines[i].strip():
-                    i += 1
-
-            para: list[str] = []
-            while i < len(raw_lines):
-                ln = raw_lines[i].strip()
-                if not ln:
-                    break
-                para.append(ln)
-                i += 1
-
-            if not para:
-                # 只有标题或格式异常时，退回用第一条非空行
-                for ln in raw_lines:
-                    if ln.strip():
-                        para = [ln.strip()]
-                        break
-
-            text = " ".join(para).strip()
-            if len(text) > max_chars:
-                text = text[:max_chars].rstrip() + "…"
-            return text
 
         digest_lines: list[str] = ["【今日值得关注】", "", "GitHub Top {}".format(settings.digest_github_top_n), ""]
         top_gh = gh_df.head(settings.digest_github_top_n) if not gh_df.empty else gh_df
         idx = 1
         for _, r in top_gh.iterrows():
-            reason = _snip_reason(r.get("ai_summary"))
+            reason = _compact_ai_reason(r.get("ai_summary"))
             digest_lines.append(f"{idx}. {r['repo_name']}")
             digest_lines.append(f"原因：{reason or '（规则层排序，尚未生成摘要）'}")
             digest_lines.append(f"评分：{float(r['score']):.1f}")
@@ -277,7 +343,7 @@ def run_daily_pipeline() -> None:
         top_ax = ax_df.head(settings.digest_arxiv_top_n) if not ax_df.empty else ax_df
         idx = 1
         for _, r in top_ax.iterrows():
-            reason = _snip_reason(r.get("ai_summary"))
+            reason = _compact_ai_reason(r.get("ai_summary"))
             digest_lines.append(f"{idx}. {r['title']}")
             digest_lines.append(f"原因：{reason or '（规则层排序，尚未生成摘要）'}")
             digest_lines.append(f"评分：{float(r['score']):.1f}")
@@ -285,11 +351,7 @@ def run_daily_pipeline() -> None:
             digest_lines.append("")
             idx += 1
 
-        pick = "（暂无）"
-        if not gh_df.empty:
-            pick = str(gh_df.iloc[0]["repo_name"])
-        elif not ax_df.empty:
-            pick = str(ax_df.iloc[0]["title"])
+        pick = _suggest_pick(gh_df, ax_df)
         digest_lines.append("建议：")
         digest_lines.append(f"今天最值得深入研究的是：{pick}")
 

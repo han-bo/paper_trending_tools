@@ -63,14 +63,22 @@ def _env_float(key: str, default: float) -> float:
 
 class Settings(BaseModel):
     github_token: str = Field(default="")
-    github_search_query: str = Field(default="stars:>500")
+    # 建议偏「趋势发现」：避免常年顶流占榜；可用 .env 覆盖为你自己的 query
+    github_search_query: str = Field(default="stars:50..5000")
     github_pushed_days: int = Field(default=7, ge=1, le=90)
+    github_created_days: int = Field(default=30, ge=1, le=365)
+    github_max_stars: int = Field(default=50000, ge=100, le=5000000)
     github_per_page: int = Field(default=20, ge=1, le=100)
 
     arxiv_rss_urls: str = Field(default="http://export.arxiv.org/rss/cs.AI")
     arxiv_max_entries: int = Field(default=30, ge=1, le=200)
     # arXiv 要求可识别的 User-Agent，见 https://info.arxiv.org/help/api/user-manual.html
-    arxiv_http_user_agent: str = Field(default="paper_trending_tools/1.0 (+https://info.arxiv.org/help/api/user-manual.html)")
+    arxiv_http_user_agent: str = Field(
+        default=(
+            "paper_trending_tools/1.0 "
+            "(+https://info.arxiv.org/help/api/user-manual.html)"
+        )
+    )
 
     database_url: str = Field(default="sqlite:///data/local.db")
 
@@ -112,8 +120,10 @@ class Settings(BaseModel):
     def load(cls) -> "Settings":
         return cls(
             github_token=_env_str("GITHUB_TOKEN", ""),
-            github_search_query=_env_str("GITHUB_SEARCH_QUERY", "stars:>500"),
+            github_search_query=_env_str("GITHUB_SEARCH_QUERY", "stars:50..5000"),
             github_pushed_days=_env_int("GITHUB_PUSHED_DAYS", 7),
+            github_created_days=_env_int("GITHUB_CREATED_DAYS", 30),
+            github_max_stars=_env_int("GITHUB_MAX_STARS", 50000),
             github_per_page=_env_int("GITHUB_PER_PAGE", 20),
             arxiv_rss_urls=_env_str("ARXIV_RSS_URLS", "http://export.arxiv.org/rss/cs.AI"),
             arxiv_max_entries=_env_int("ARXIV_MAX_ENTRIES", 30),

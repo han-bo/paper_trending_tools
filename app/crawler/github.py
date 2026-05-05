@@ -135,7 +135,15 @@ def _last_commit_at(owner: str, repo: str) -> datetime | None:
 def search_hot_repositories() -> list[dict[str, Any]]:
     """搜索近期活跃的高星仓库，返回标准化字段。"""
     pushed_since = (date.today() - timedelta(days=settings.github_pushed_days)).isoformat()
-    q = f"{settings.github_search_query} pushed:>{pushed_since}"
+    created_since = (date.today() - timedelta(days=settings.github_created_days)).isoformat()
+    q = " ".join(
+        [
+            settings.github_search_query,
+            f"pushed:>{pushed_since}",
+            f"created:>{created_since}",
+            f"stars:<{settings.github_max_stars}",
+        ]
+    )
     url = "https://api.github.com/search/repositories"
     data = _get_json(
         url,
