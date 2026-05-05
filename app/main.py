@@ -6,6 +6,7 @@ import sys
 from loguru import logger
 
 from app.config import settings
+from app.inspect_db import inspect_database
 from app.llm.volcengine_client import chat_completions
 from app.scheduler.jobs import run_daily_pipeline, setup_scheduler
 
@@ -39,6 +40,23 @@ def main() -> None:
         action="store_true",
         help="只发一条最短请求到火山方舟，验证 LLM 是否可用后退出",
     )
+    parser.add_argument(
+        "--inspect-db",
+        action="store_true",
+        help="打印库里抓取的 GitHub / arXiv / 每日摘要（只读，不跑任务）",
+    )
+    parser.add_argument(
+        "--inspect-limit",
+        type=int,
+        default=20,
+        help="与 --inspect-db 合用：GitHub、arXiv 各显示最近几条（默认 20）",
+    )
+    parser.add_argument(
+        "--digest-limit",
+        type=int,
+        default=5,
+        help="与 --inspect-db 合用：daily_digest 显示几条（默认 5）",
+    )
     args = parser.parse_args()
 
     logger.remove()
@@ -46,6 +64,13 @@ def main() -> None:
 
     if args.test_llm:
         _run_test_llm()
+        return
+
+    if args.inspect_db:
+        if args.inspect_limit < 1 or args.digest_limit < 1:
+            logger.error("--inspect-limit / --digest-limit 须 >= 1")
+            sys.exit(1)
+        inspect_database(limit=args.inspect_limit, digest_limit=args.digest_limit)
         return
 
     if args.once:

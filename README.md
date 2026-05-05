@@ -42,6 +42,14 @@ python -m app.main --once
 python -m app.main --test-llm
 ```
 
+查看本地库里已抓取的 GitHub / arXiv / 每日摘要（**只读**，不跑任务；路径由 `DATABASE_URL` 决定）：
+
+```bash
+python -m app.main --inspect-db
+python -m app.main --inspect-db --inspect-limit 10 --digest-limit 3
+# 或：python -m app.inspect_db --limit 10
+```
+
 按 `.env` 中的 Cron 配置常驻调度（默认每天 8:00，时区 `Asia/Shanghai`）：
 
 ```bash
