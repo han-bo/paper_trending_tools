@@ -51,6 +51,16 @@ def _env_bool(key: str, default: bool) -> bool:
     return v.strip().lower() in ("1", "true", "yes", "on")
 
 
+def _env_float(key: str, default: float) -> float:
+    v = os.environ.get(key)
+    if v is None or v == "":
+        return default
+    try:
+        return float(v)
+    except ValueError:
+        return default
+
+
 class Settings(BaseModel):
     github_token: str = Field(default="")
     github_search_query: str = Field(default="stars:>500")
@@ -65,6 +75,10 @@ class Settings(BaseModel):
     volcengine_api_key: str = Field(default="")
     volcengine_api_base: str = Field(default="https://ark.cn-beijing.volces.com/api/v3")
     volcengine_model: str = Field(default="")
+    volcengine_connect_timeout: float = Field(default=30.0, ge=5.0, le=120.0)
+    volcengine_read_timeout: float = Field(default=300.0, ge=30.0, le=900.0)
+    llm_github_readme_max_chars: int = Field(default=6000, ge=2000, le=50000)
+    llm_paper_abstract_max_chars: int = Field(default=8000, ge=1000, le=50000)
 
     telegram_bot_token: str = Field(default="")
     telegram_chat_id: str = Field(default="")
@@ -104,6 +118,10 @@ class Settings(BaseModel):
                 "https://ark.cn-beijing.volces.com/api/v3",
             ),
             volcengine_model=_env_str("VOLCENGINE_MODEL", ""),
+            volcengine_connect_timeout=_env_float("VOLCENGINE_CONNECT_TIMEOUT", 30.0),
+            volcengine_read_timeout=_env_float("VOLCENGINE_READ_TIMEOUT", 300.0),
+            llm_github_readme_max_chars=_env_int("LLM_GITHUB_README_MAX_CHARS", 6000),
+            llm_paper_abstract_max_chars=_env_int("LLM_PAPER_ABSTRACT_MAX_CHARS", 8000),
             telegram_bot_token=_env_str("TELEGRAM_BOT_TOKEN", ""),
             telegram_chat_id=_env_str("TELEGRAM_CHAT_ID", ""),
             smtp_host=_env_str("SMTP_HOST", ""),

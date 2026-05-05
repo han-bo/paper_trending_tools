@@ -3,6 +3,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from app.config import settings
+
 _ROOT = Path(__file__).resolve().parent.parent.parent
 
 
@@ -24,7 +26,7 @@ def build_github_prompt(
     return tpl.format(
         repo_name=repo_name,
         description=description or "（无）",
-        readme=(readme or "（无 README）")[:12000],
+        readme=(readme or "（无 README）")[: settings.llm_github_readme_max_chars],
         stars=stars,
         contributors=contributors,
         recent_activity=recent_activity or "（无）",
@@ -42,7 +44,7 @@ def build_paper_prompt(
     tpl = load_template("paper_analysis.txt")
     return tpl.format(
         title=title,
-        abstract=abstract or "（无）",
+        abstract=(abstract or "（无）")[: settings.llm_paper_abstract_max_chars],
         authors=authors or "（无）",
         category=category or "（无）",
         github_repo=github_repo or "未发现明显 GitHub 仓库链接",

@@ -21,6 +21,8 @@ cp .env.example .env
 
 - `GITHUB_TOKEN`：GitHub PAT，提高 REST API 限额并访问私有数据以外的高级能力（**强烈建议配置**）。
 - `VOLCENGINE_API_KEY` / `VOLCENGINE_MODEL`：火山方舟 OpenAI 兼容接口的 API Key 与接入点 ID（`ep-...`）。未配置时将只做规则层评分。
+- `VOLCENGINE_READ_TIMEOUT` / `VOLCENGINE_CONNECT_TIMEOUT`：调用方舟时的读、连接超时（秒），默认读 300；若仍出现 `ReadTimeout` 可继续调大读超时。
+- `LLM_GITHUB_README_MAX_CHARS` / `LLM_PAPER_ABSTRACT_MAX_CHARS`：送入模型的 README / 摘要最大字符数，默认缩短以降低延迟与超时。
 - `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID`：BotFather 创建的 Bot 与目标会话 ID。未配置则跳过 Telegram。
 - **邮件**：配置 `SMTP_HOST`、`SMTP_FROM`、`DIGEST_EMAIL_TO`（多个收件人用英文逗号分隔）后即会发送与 Telegram 相同正文的纯文本邮件。常用项：`SMTP_PORT`（默认 `587`）、`SMTP_USER` / `SMTP_PASSWORD`、`SMTP_STARTTLS`（默认 `true`）。若使用 **465 + SSL**，设 `SMTP_PORT=465`、`SMTP_USE_SSL=true`、`SMTP_STARTTLS=false`。可选 `DIGEST_EMAIL_SUBJECT` 自定义主题。
 

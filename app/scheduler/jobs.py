@@ -4,6 +4,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 import pandas as pd
+import httpx
 from loguru import logger
 from sqlalchemy import func, select
 
@@ -132,6 +133,14 @@ def run_daily_pipeline() -> None:
                 )
                 try:
                     text = chat_completions([{"role": "user", "content": prompt}])
+                except httpx.TimeoutException as e:
+                    logger.warning(
+                        "GitHub LLM 超时（read {:.0f}s）{}: {}",
+                        settings.volcengine_read_timeout,
+                        row.repo_name,
+                        e,
+                    )
+                    continue
                 except Exception as e:
                     logger.exception("GitHub LLM 失败 {}: {}", row.repo_name, e)
                     continue
@@ -162,6 +171,14 @@ def run_daily_pipeline() -> None:
                 )
                 try:
                     text = chat_completions([{"role": "user", "content": prompt}])
+                except httpx.TimeoutException as e:
+                    logger.warning(
+                        "arXiv LLM 超时（read {:.0f}s）{}: {}",
+                        settings.volcengine_read_timeout,
+                        row.title[:80],
+                        e,
+                    )
+                    continue
                 except Exception as e:
                     logger.exception("arXiv LLM 失败 {}: {}", row.title[:80], e)
                     continue
