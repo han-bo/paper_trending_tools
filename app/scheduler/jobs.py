@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import time
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -34,6 +35,38 @@ from app.ranking.github_score import (
 )
 
 
+_Q = r"[\?？]?"
+_PROMPT_HEAD_ONLY = re.compile(
+    "^("
+    rf"是否值得(持续)?关注{_Q}"
+    rf"|技术壁垒在哪里{_Q}"
+    rf"|是否只是套壳项目{_Q}"
+    rf"|商业化可能性如何{_Q}"
+    rf"|是否值得自己投入研究{_Q}"
+    rf"|与现有项目相比差异在哪{_Q}"
+    r")\s*$"
+)
+
+
+def _strip_reason_line(s: str) -> str:
+    t = s.lstrip("#").strip()
+    t = re.sub(r"^[-*]\s+", "", t)
+    return re.sub(r"^\d+\.\s*", "", t).strip()
+
+
+def _is_meta_date_nitpick(s: str) -> bool:
+    if "笔误" in s and ("时间线" in s or "日期" in s):
+        return True
+    if "假设" in s and "笔误" in s:
+        return True
+    return False
+
+
+def _is_prompt_heading_line(s: str) -> bool:
+    body = _strip_reason_line(s)
+    return bool(_PROMPT_HEAD_ONLY.match(body))
+
+
 def _compact_ai_reason(ai_summary: object, *, max_points: int = 3) -> str:
     """把 LLM 长输出压缩成「结论 + 2~3 个要点」，避免 digest 只看到标题。"""
     if not isinstance(ai_summary, str) or not ai_summary.strip():
@@ -44,23 +77,37 @@ def _compact_ai_reason(ai_summary: object, *, max_points: int = 3) -> str:
 
     picked: list[str] = []
 
-    # 1) 结论：优先找“是否值得持续关注/值得关注/不值得”
-    for ln in lines:
-        if "值得持续关注" in ln or ("值得" in ln and ("关注" in ln or "跟进" in ln)):
-            picked.append(ln.lstrip("#").strip())
+    # 1) 结论：对应「是否值得持续关注」——跳过与提示词完全同形的标题行，优先用下一条正文
+    for i, ln in enumerate(lines):
+        if _is_meta_date_nitpick(ln):
+            continue
+        body = _strip_reason_line(ln)
+        if _is_prompt_heading_line(ln):
+            if i + 1 < len(lines):
+                nxt = _strip_reason_line(lines[i + 1])
+                if nxt and not _is_prompt_heading_line(lines[i + 1]) and not _is_meta_date_nitpick(lines[i + 1]):
+                    picked.append(nxt)
             break
-        if "不值得" in ln and ("关注" in ln or "跟进" in ln):
-            picked.append(ln.lstrip("#").strip())
+        if "不值得" in body and ("关注" in body or "跟进" in body):
+            picked.append(body)
+            break
+        if len(body) > 12 and (
+            "值得持续关注" in body
+            or ("值得" in body and ("关注" in body or "跟进" in body))
+        ):
+            picked.append(body)
             break
 
     # 2) 关键点：技术壁垒 / 套壳 / 商业化 / 差异
     keywords = ("技术壁垒", "套壳", "商业", "落地", "差异", "护城河", "壁垒", "复用", "成本")
     for ln in lines:
-        if ln.startswith("#"):
+        if ln.startswith("#") or _is_meta_date_nitpick(ln):
+            continue
+        if _is_prompt_heading_line(ln):
             continue
         if any(k in ln for k in keywords):
-            s = ln.strip("- ").strip()
-            if s and s not in picked:
+            s = _strip_reason_line(ln)
+            if s and s not in picked and not _is_prompt_heading_line(ln):
                 picked.append(s)
         if len(picked) >= max_points:
             break
@@ -68,9 +115,11 @@ def _compact_ai_reason(ai_summary: object, *, max_points: int = 3) -> str:
     # 3) 如果仍不足，用第一段非标题补齐
     if len(picked) < 2:
         for ln in lines:
-            if ln.startswith("#"):
+            if ln.startswith("#") or _is_meta_date_nitpick(ln):
                 continue
-            s = ln.strip("- ").strip()
+            if _is_prompt_heading_line(ln):
+                continue
+            s = _strip_reason_line(ln)
             if s and s not in picked:
                 picked.append(s)
             if len(picked) >= max_points:
