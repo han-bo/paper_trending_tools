@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Float, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, Float, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -26,6 +26,7 @@ class GitHubProject(Base):
     topic: Mapped[str | None] = mapped_column(Text, nullable=True)
     raw_readme: Mapped[str | None] = mapped_column(Text, nullable=True)
     score: Mapped[float] = mapped_column(Float, default=0.0)
+    ai_rating: Mapped[float | None] = mapped_column(Float, nullable=True)
     ai_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     worth_follow: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(
@@ -47,8 +48,26 @@ class ArxivPaper(Base):
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     github_repo_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     score: Mapped[float] = mapped_column(Float, default=0.0)
+    ai_rating: Mapped[float | None] = mapped_column(Float, nullable=True)
     ai_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     worth_follow: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now().astimezone(),
+    )
+
+
+class UserFeedback(Base):
+    __tablename__ = "user_feedback"
+    __table_args__ = (
+        UniqueConstraint("item_type", "item_key", "digest_date", name="uq_feedback_item_day"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    item_type: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    item_key: Mapped[str] = mapped_column(String(512), nullable=False, index=True)
+    digest_date: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    signal: Mapped[str] = mapped_column(String(16), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now().astimezone(),

@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>反馈已记录</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 520px; margin: 48px auto; padding: 0 16px; color: #222; }
+    .card { border: 1px solid #e0e0e0; border-radius: 8px; padding: 24px; background: #fafafa; }
+    h1 { font-size: 1.4rem; margin-top: 0; }
+    .meta { color: #666; font-size: 0.95rem; line-height: 1.6; }
+    .label { font-size: 1.1rem; margin: 12px 0; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>感谢反馈</h1>
+    <p class="label">{{LABEL}}</p>
+    <p class="meta">
+      类型：{{TYPE}}<br>
+      条目：{{ITEM_KEY}}<br>
+      摘要日期：{{DATE}}
+    </p>
+    <p class="meta">你的意见已记录，将影响后续排序降权。</p>
+  </div>
+</body>
+</html>

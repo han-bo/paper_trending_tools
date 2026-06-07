@@ -1,0 +1,16 @@
+[Unit]
+Description=Paper trending feedback HTTP server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/workdir/paper_trending
+Environment=PATH=/root/workdir/paper_trending/.venv/bin
+ExecStart=/root/workdir/paper_trending/.venv/bin/python -m app.main --run-feedback-server
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

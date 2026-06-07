@@ -77,18 +77,20 @@ def send_digest_zoho_mail(
     to_addrs: list[str],
     subject: str,
     from_addr: str,
+    mail_format: str = "plaintext",
 ) -> None:
-    """按 Zoho Mail API 逐封发送纯文本（每收件人一封，与 API 字段一致）。"""
+    """按 Zoho Mail API 逐封发送（每收件人一封，与 API 字段一致）。"""
     token = _zoho_access_token()
     account_id = _zoho_account_id(token)
     base = settings.zoho_mail_api_base.strip().rstrip("/")
     url = f"{base}/api/accounts/{account_id}/messages"
     headers = {"Authorization": f"Zoho-oauthtoken {token}"}
+    fmt = mail_format if mail_format in ("plaintext", "html") else "plaintext"
     payload_base = {
         "fromAddress": from_addr.strip(),
         "subject": subject,
         "content": content,
-        "mailFormat": "plaintext",
+        "mailFormat": fmt,
     }
     for to in to_addrs:
         r = httpx.post(

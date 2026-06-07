@@ -116,6 +116,18 @@ class Settings(BaseModel):
     scheduler_cron_minute: int = Field(default=0, ge=0, le=59)
     scheduler_timezone: str = Field(default="Asia/Shanghai")
 
+    feedback_base_url: str = Field(default="")
+    feedback_hmac_secret: str = Field(default="")
+    feedback_penalty_per_down: float = Field(default=5.0, ge=0.0, le=50.0)
+    feedback_penalty_cap: float = Field(default=20.0, ge=0.0, le=100.0)
+    feedback_listen_host: str = Field(default="127.0.0.1")
+    feedback_listen_port: int = Field(default=8081, ge=1, le=65535)
+    feedback_report_dow: str = Field(default="mon")
+    feedback_report_hour: int = Field(default=9, ge=0, le=23)
+    feedback_report_minute: int = Field(default=0, ge=0, le=59)
+    feedback_report_days: int = Field(default=7, ge=1, le=90)
+    feedback_report_email: bool = Field(default=True)
+
     @classmethod
     def load(cls) -> "Settings":
         return cls(
@@ -169,6 +181,17 @@ class Settings(BaseModel):
             scheduler_cron_hour=_env_int("SCHEDULER_CRON_HOUR", 8),
             scheduler_cron_minute=_env_int("SCHEDULER_CRON_MINUTE", 0),
             scheduler_timezone=_env_str("SCHEDULER_TIMEZONE", "Asia/Shanghai"),
+            feedback_base_url=_env_str("FEEDBACK_BASE_URL", ""),
+            feedback_hmac_secret=_env_str("FEEDBACK_HMAC_SECRET", ""),
+            feedback_penalty_per_down=_env_float("FEEDBACK_PENALTY_PER_DOWN", 5.0),
+            feedback_penalty_cap=_env_float("FEEDBACK_PENALTY_CAP", 20.0),
+            feedback_listen_host=_env_str("FEEDBACK_LISTEN_HOST", "127.0.0.1"),
+            feedback_listen_port=_env_int("FEEDBACK_LISTEN_PORT", 8081),
+            feedback_report_dow=_env_str("FEEDBACK_REPORT_DOW", "mon"),
+            feedback_report_hour=_env_int("FEEDBACK_REPORT_HOUR", 9),
+            feedback_report_minute=_env_int("FEEDBACK_REPORT_MINUTE", 0),
+            feedback_report_days=_env_int("FEEDBACK_REPORT_DAYS", 7),
+            feedback_report_email=_env_bool("FEEDBACK_REPORT_EMAIL", True),
         )
 
 

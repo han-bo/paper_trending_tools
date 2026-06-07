@@ -28,6 +28,15 @@ from app.ranking.arxiv_score import (
     compute_engineering_score as arxiv_engineering,
     worth_follow_from_ai_rating as arxiv_worth,
 )
+from app.feedback.digest import (
+    DigestItem,
+    attach_feedback_links,
+    render_digest_html,
+    render_digest_text,
+)
+from app.feedback.keys import item_key_for_row
+from app.feedback.links import feedback_configured
+from app.feedback.penalty import effective_score, load_penalty_map
 from app.ranking.github_score import (
     combine_github_scores,
     compute_engineering_score as gh_engineering,
@@ -137,10 +146,11 @@ def _compact_ai_reason(ai_summary: object, *, max_points: int = 3) -> str:
 
 def _suggest_pick(gh_df: pd.DataFrame, ax_df: pd.DataFrame) -> str:
     """独立于综合分的“今日建议”：偏向新出现、可落地、能行动。"""
+    score_col = "effective_score" if "effective_score" in gh_df.columns else "score"
     # GitHub：避免常年顶流，优先“近期增星明显 + 分高”的中等规模项目
     if not gh_df.empty:
         df = gh_df.copy()
-        for col in ("stars", "stars_growth", "score"):
+        for col in ("stars", "stars_growth", "score", "effective_score"):
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
         df["worth_follow"] = df.get("worth_follow", False).fillna(False)
@@ -152,7 +162,7 @@ def _suggest_pick(gh_df: pd.DataFrame, ax_df: pd.DataFrame) -> str:
         ]
         if not cand.empty:
             cand = cand.sort_values(
-                ["worth_follow", "stars_growth", "score"],
+                ["worth_follow", "stars_growth", score_col],
                 ascending=[False, False, False],
             )
             return str(cand.iloc[0].get("repo_name") or "（暂无）")
@@ -160,7 +170,7 @@ def _suggest_pick(gh_df: pd.DataFrame, ax_df: pd.DataFrame) -> str:
         # 退化：取排除顶流后的最高分
         cand2 = df[df["stars"] < settings.github_max_stars]
         if not cand2.empty:
-            cand2 = cand2.sort_values(["score"], ascending=[False])
+            cand2 = cand2.sort_values([score_col], ascending=[False])
             return str(cand2.iloc[0].get("repo_name") or "（暂无）")
 
         return str(df.iloc[0].get("repo_name") or "（暂无）")
@@ -168,12 +178,13 @@ def _suggest_pick(gh_df: pd.DataFrame, ax_df: pd.DataFrame) -> str:
     # arXiv：优先带代码仓库，其次最高分
     if not ax_df.empty:
         df = ax_df.copy()
-        df["score"] = pd.to_numeric(df.get("score"), errors="coerce").fillna(0)
+        ax_score_col = "effective_score" if "effective_score" in df.columns else "score"
+        df[ax_score_col] = pd.to_numeric(df.get(ax_score_col), errors="coerce").fillna(0)
         with_code = df[df.get("github_repo_url").fillna("").astype(str).str.len() > 0]
         if not with_code.empty:
-            with_code = with_code.sort_values(["score"], ascending=[False])
+            with_code = with_code.sort_values([ax_score_col], ascending=[False])
             return str(with_code.iloc[0].get("title") or "（暂无）")
-        df = df.sort_values(["score"], ascending=[False])
+        df = df.sort_values([ax_score_col], ascending=[False])
         return str(df.iloc[0].get("title") or "（暂无）")
 
     return "（暂无）"
@@ -194,6 +205,62 @@ def _sleep_between_llm_calls() -> None:
     sec = settings.volcengine_llm_interval_seconds
     if sec > 0:
         time.sleep(sec)
+
+
+def _row_dict(obj) -> dict:
+    return {k: v for k, v in obj.__dict__.items() if not k.startswith("_")}
+
+
+def _enrich_df_with_effective_score(
+    df: pd.DataFrame,
+    item_type: str,
+    penalty_map: dict[tuple[str, str], float],
+) -> pd.DataFrame:
+    if df.empty:
+        return df
+    out = df.copy()
+    keys: list[str] = []
+    effective: list[float] = []
+    for _, row in out.iterrows():
+        r = row.to_dict()
+        key = item_key_for_row(item_type, r)
+        keys.append(key)
+        base = float(row.get("score") or 0)
+        effective.append(
+            effective_score(base, item_type=item_type, item_key=key, penalty_map=penalty_map)
+        )
+    out["item_key"] = keys
+    out["effective_score"] = effective
+    return out.sort_values("effective_score", ascending=False)
+
+
+def _dataframe_to_digest_items(
+    df: pd.DataFrame,
+    *,
+    item_type: str,
+    limit: int,
+    title_col: str,
+    url_col: str,
+) -> list[DigestItem]:
+    items: list[DigestItem] = []
+    if df.empty:
+        return items
+    for _, row in df.head(limit).iterrows():
+        base = float(row.get("score") or 0)
+        eff = float(row.get("effective_score") if "effective_score" in row else base)
+        key = str(row.get("item_key") or item_key_for_row(item_type, row.to_dict()))
+        items.append(
+            DigestItem(
+                item_type=item_type,
+                item_key=key,
+                title=str(row.get(title_col) or ""),
+                reason=_compact_ai_reason(row.get("ai_summary")),
+                score=base,
+                effective_score=eff,
+                url=str(row.get(url_col) or ""),
+            )
+        )
+    return items
 
 
 def run_daily_pipeline() -> None:
@@ -313,6 +380,7 @@ def run_daily_pipeline() -> None:
                     }
                 )
                 gh_row.ai_summary = text
+                gh_row.ai_rating = float(rating) if rating is not None else None
                 gh_row.score = combine_github_scores(eng, rating)
                 gh_row.worth_follow = gh_worth(rating)
                 session.add(gh_row)
@@ -350,6 +418,7 @@ def run_daily_pipeline() -> None:
                     }
                 )
                 ax_row.ai_summary = text
+                ax_row.ai_rating = float(rating) if rating is not None else None
                 ax_row.score = combine_arxiv_scores(eng, rating)
                 ax_row.worth_follow = arxiv_worth(rating)
                 session.add(ax_row)
@@ -365,46 +434,51 @@ def run_daily_pipeline() -> None:
             select(ArxivPaper).where(ArxivPaper.id > last_ax).order_by(ArxivPaper.score.desc())
         ).all()
 
-        def _row_dict(obj) -> dict:
-            return {k: v for k, v in obj.__dict__.items() if not k.startswith("_")}
+        penalty_map = load_penalty_map(session)
 
         gh_df = pd.DataFrame([_row_dict(g) for g in new_github])
         if not gh_df.empty:
-            gh_df = gh_df.sort_values("score", ascending=False)
+            gh_df = _enrich_df_with_effective_score(gh_df, "github", penalty_map)
         ax_df = pd.DataFrame([_row_dict(a) for a in new_arxiv])
         if not ax_df.empty:
-            ax_df = ax_df.sort_values("score", ascending=False)
+            ax_df = _enrich_df_with_effective_score(ax_df, "arxiv", penalty_map)
 
-        digest_lines: list[str] = ["【今日值得关注】", "", "GitHub Top {}".format(settings.digest_github_top_n), ""]
-        top_gh = gh_df.head(settings.digest_github_top_n) if not gh_df.empty else gh_df
-        idx = 1
-        for _, r in top_gh.iterrows():
-            reason = _compact_ai_reason(r.get("ai_summary"))
-            digest_lines.append(f"{idx}. {r['repo_name']}")
-            digest_lines.append(f"原因：{reason or '（规则层排序，尚未生成摘要）'}")
-            digest_lines.append(f"评分：{float(r['score']):.1f}")
-            digest_lines.append(f"链接：{r['repo_url']}")
-            digest_lines.append("")
-            idx += 1
-
-        digest_lines.append("arXiv Top {}".format(settings.digest_arxiv_top_n))
-        digest_lines.append("")
-        top_ax = ax_df.head(settings.digest_arxiv_top_n) if not ax_df.empty else ax_df
-        idx = 1
-        for _, r in top_ax.iterrows():
-            reason = _compact_ai_reason(r.get("ai_summary"))
-            digest_lines.append(f"{idx}. {r['title']}")
-            digest_lines.append(f"原因：{reason or '（规则层排序，尚未生成摘要）'}")
-            digest_lines.append(f"评分：{float(r['score']):.1f}")
-            digest_lines.append(f"链接：{r['paper_url']}")
-            digest_lines.append("")
-            idx += 1
+        gh_items = _dataframe_to_digest_items(
+            gh_df,
+            item_type="github",
+            limit=settings.digest_github_top_n,
+            title_col="repo_name",
+            url_col="repo_url",
+        )
+        ax_items = _dataframe_to_digest_items(
+            ax_df,
+            item_type="arxiv",
+            limit=settings.digest_arxiv_top_n,
+            title_col="title",
+            url_col="paper_url",
+        )
+        gh_items = attach_feedback_links(gh_items, digest_date)
+        ax_items = attach_feedback_links(ax_items, digest_date)
 
         pick = _suggest_pick(gh_df, ax_df)
-        digest_lines.append("建议：")
-        digest_lines.append(f"今天最值得深入研究的是：{pick}")
 
-        content = "\n".join(digest_lines).strip()
+        content = render_digest_text(
+            digest_date=digest_date,
+            github_items=gh_items,
+            arxiv_items=ax_items,
+            suggest_pick=pick,
+            include_feedback_links=False,
+        )
+        html_content = (
+            render_digest_html(
+                digest_date=digest_date,
+                github_items=gh_items,
+                arxiv_items=ax_items,
+                suggest_pick=pick,
+            )
+            if feedback_configured()
+            else None
+        )
         status_parts: list[str] = []
 
         if settings.telegram_bot_token and settings.telegram_chat_id:
@@ -419,7 +493,7 @@ def run_daily_pipeline() -> None:
 
         if email_notify_configured():
             try:
-                send_digest_email(content)
+                send_digest_email(text_content=content, html_content=html_content)
                 status_parts.append("email:sent")
             except Exception as e:
                 logger.exception("邮件发送失败: {}", e)
@@ -448,6 +522,22 @@ def run_daily_pipeline() -> None:
         session.close()
 
 
+def run_scheduled_feedback_report() -> None:
+    """由 APScheduler 触发：生成近 N 天反馈周报。"""
+    from app.feedback.report import run_feedback_report
+    from app.notifier.email_notify import email_notify_configured
+
+    send_email = settings.feedback_report_email and email_notify_configured()
+    try:
+        report = run_feedback_report(days=settings.feedback_report_days, email=send_email)
+        if send_email:
+            logger.info("反馈周报已邮件发送（近 {} 天）", settings.feedback_report_days)
+        else:
+            logger.info("反馈周报（近 {} 天）:\n{}", settings.feedback_report_days, report)
+    except Exception as e:
+        logger.exception("反馈周报失败: {}", e)
+
+
 def setup_scheduler():
     from apscheduler.schedulers.blocking import BlockingScheduler
     from apscheduler.triggers.cron import CronTrigger
@@ -460,6 +550,16 @@ def setup_scheduler():
             minute=settings.scheduler_cron_minute,
         ),
         id="daily_research_digest",
+        replace_existing=True,
+    )
+    sched.add_job(
+        run_scheduled_feedback_report,
+        CronTrigger(
+            day_of_week=settings.feedback_report_dow,
+            hour=settings.feedback_report_hour,
+            minute=settings.feedback_report_minute,
+        ),
+        id="weekly_feedback_report",
         replace_existing=True,
     )
     return sched
